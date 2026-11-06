@@ -1,0 +1,11 @@
+Paper B: Wide Residual Networks Revisited
+
+Abstract
+We revisit wide residual networks and show a CNN accuracy of 95% on CIFAR-10 with 36 million parameters.
+
+Methodology
+Wider layers and dropout between convolutions improve accuracy at the price of a much higher cost of
+5.2 GFLOPs per image. Training uses 200 epochs.
+
+Results
+The CNN accuracy on CIFAR-10 is 95%. Precision is 0.95 and recall is 0.94.

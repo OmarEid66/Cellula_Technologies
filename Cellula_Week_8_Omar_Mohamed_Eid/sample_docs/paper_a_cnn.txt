@@ -1,0 +1,12 @@
+Paper A: Image Classification with ResNet-Lite
+
+Abstract
+We present ResNet-Lite, a compact convolutional neural network (CNN) for image classification on CIFAR-10.
+ResNet-Lite reaches a CNN accuracy of 92% on the CIFAR-10 test set while using 1.2 million parameters.
+
+Methodology
+The network uses residual blocks with depthwise separable convolutions. Training uses SGD with momentum
+for 120 epochs. The computational cost is 0.3 GFLOPs per image.
+
+Results
+The CNN accuracy on CIFAR-10 is 92%. Precision is 0.91 and recall is 0.92.

@@ -1,0 +1,12 @@
+Paper C: A Shallow CNN Baseline
+
+Abstract
+We evaluate a shallow baseline convolutional network. It reaches a CNN accuracy of 89% on CIFAR-10 with
+0.4 million parameters, showing that small models remain competitive for constrained devices.
+
+Methodology
+The baseline has five convolutional layers and no residual connections. Training uses Adam for 60 epochs.
+The computational cost is 0.1 GFLOPs per image.
+
+Results
+The CNN accuracy on CIFAR-10 is 89%. Precision is 0.88 and recall is 0.89.

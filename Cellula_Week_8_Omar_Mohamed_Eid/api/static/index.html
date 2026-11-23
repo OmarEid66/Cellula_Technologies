@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chat with your documents</title>
+<style>
+  :root {
+    --bg: #f5f7fa; --panel: #ffffff; --ink: #1c2733; --muted: #667085; --line: #dfe5ec;
+    --accent: #1f6feb; --accent-ink: #ffffff; --user: #e8f0fe; --bot: #ffffff; --danger: #c0392b; --ok: #1e8e4e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0f1720; --panel: #17212c; --ink: #e6edf3; --muted: #9aa7b5; --line: #263341;
+            --accent: #4c9aff; --accent-ink: #06121f; --user: #1b2c44; --bot: #17212c; --danger: #ff7b6b; --ok: #4cc380; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; align-items: center; gap: 12px; padding: 12px 20px; background: var(--panel); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  header h1 { font-size: 17px; margin: 0; flex: 1; min-width: 200px; }
+  .pill { font-size: 12px; padding: 2px 10px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); }
+  .pill.ok { color: var(--ok); border-color: var(--ok); } .pill.bad { color: var(--danger); border-color: var(--danger); }
+  main { display: grid; grid-template-columns: 340px 1fr; gap: 16px; padding: 16px 20px; max-width: 1400px; margin: 0 auto; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  aside { display: flex; flex-direction: column; gap: 16px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 10px; }
+  button, .btn { font: inherit; cursor: pointer; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 8px; padding: 6px 12px; }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  input[type=text], input[type=password], textarea { width: 100%; font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+  textarea { resize: vertical; }
+  label.small, .small { font-size: 12px; color: var(--muted); }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .doc { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0; border-top: 1px solid var(--line); font-size: 14px; }
+  .doc:first-child { border-top: 0; } .doc span.name { overflow-wrap: anywhere; }
+  .drop { border: 2px dashed var(--line); border-radius: 10px; padding: 14px; text-align: center; color: var(--muted); cursor: pointer; }
+  .drop.over { border-color: var(--accent); color: var(--accent); }
+  #chat { display: flex; flex-direction: column; min-height: 70vh; }
+  #log { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; padding: 4px 2px 12px; max-height: 66vh; }
+  .msg { max-width: 92%; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--line); overflow-wrap: anywhere; }
+  .msg.user { align-self: flex-end; background: var(--user); } .msg.bot { align-self: flex-start; background: var(--bot); }
+  .msg.err { border-color: var(--danger); color: var(--danger); }
+  .msg .tag { font-size: 11px; color: var(--muted); display: block; margin-bottom: 4px; }
+  .msg p { margin: 0 0 8px; } .msg p:last-child { margin: 0; }
+  .msg table { border-collapse: collapse; margin: 6px 0; font-size: 14px; } .msg th, .msg td { border: 1px solid var(--line); padding: 4px 8px; text-align: left; }
+  .msg ul, .msg ol { margin: 4px 0 8px 20px; padding: 0; } .msg code { background: var(--bg); padding: 0 4px; border-radius: 4px; }
+  .composer { display: flex; gap: 8px; align-items: flex-end; border-top: 1px solid var(--line); padding-top: 12px; }
+  .composer textarea { flex: 1; min-height: 44px; max-height: 160px; }
+  #mic.rec { background: var(--danger); color: #fff; border-color: var(--danger); animation: pulse 1.2s infinite; }
+  @keyframes pulse { 50% { opacity: .65; } }
+  .ocr-out { white-space: pre-wrap; font-size: 13px; background: var(--bg); border-radius: 8px; padding: 8px; max-height: 160px; overflow: auto; margin-top: 8px; }
+  details { margin-top: 8px; font-size: 13px; } .ok { color: var(--ok); } .bad { color: var(--danger); }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Chat with your documents</h1>
+  <span id="status" class="pill">checking…</span>
+  <span id="keybox" hidden><input id="apikey" type="password" placeholder="API key" style="width:170px"></span>
+</header>
+
+<main>
+  <aside>
+    <section class="card">
+      <h2>Documents</h2>
+      <div id="drop" class="drop" tabindex="0">Drop PDF, DOCX, TXT or image files here, or click to choose</div>
+      <input id="files" type="file" multiple hidden accept=".pdf,.docx,.txt,.md,.png,.jpg,.jpeg,.bmp,.tif,.tiff,.webp,.gif">
+      <div id="upload-msg" class="small" style="margin-top:8px"></div>
+      <div id="docs" style="margin-top:8px"></div>
+      <button id="clear" class="small" style="margin-top:8px" hidden>Remove everything</button>
+    </section>
+
+    <section class="card">
+      <h2>Image → text (OCR)</h2>
+      <input id="img" type="file" accept="image/*">
+      <div class="row" style="margin-top:8px">
+        <button id="ocr-only">Extract text</button>
+        <button id="ocr-ingest">Add to knowledge base</button>
+        <button id="ocr-ask">Use as question</button>
+      </div>
+      <input id="img-instruction" type="text" placeholder="Optional instruction for “Use as question”" style="margin-top:8px">
+      <div id="ocr-out" class="ocr-out" hidden></div>
+    </section>
+
+    <section class="card">
+      <h2>PDF report</h2>
+      <label class="small" for="rep-title">Title (optional)</label>
+      <input id="rep-title" type="text" placeholder="e.g. CNN accuracy comparison">
+      <label class="small" for="rep-inst" style="display:block;margin-top:8px">Design instructions</label>
+      <textarea id="rep-inst" rows="4" placeholder="e.g. Navy headings, Times body at 11pt, justified text, two columns, a bar chart of the accuracies, footer “Internal”"></textarea>
+      <div class="row" style="margin-top:8px"><button id="rep-go" class="primary">Generate report</button><span id="rep-msg" class="small"></span></div>
+      <div id="rep-out"></div>
+    </section>
+  </aside>
+
+  <section class="card" id="chat">
+    <div id="log" aria-live="polite">
+      <div class="msg bot"><span class="tag">Assistant</span>Upload documents, then ask by typing or with the microphone. Follow-up questions keep the conversation context.</div>
+    </div>
+    <div class="composer">
+      <textarea id="q" rows="1" placeholder="Ask a question about your documents…"></textarea>
+      <button id="mic" title="Click to start/stop recording">🎤 Speak</button>
+      <button id="send" class="primary">Send</button>
+    </div>
+    <label class="small" style="margin-top:8px"><input type="checkbox" id="speak"> Read answers aloud</label>
+  </section>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let sessionId = null, recorder = null, chunks = [], busy = false;
+try { sessionId = sessionStorage.getItem("sid"); } catch (e) {}
+
+// ---------- helpers
+const esc = (s) => s.replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function inline(s) {
+  return esc(s).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+               .replace(/(^|[^*\w])\*(?!\s)([^*\n]+?)\*(?![*\w])/g, "$1<i>$2</i>");
+}
+function md(text) {                       // small markdown renderer: tables, lists, headings, paragraphs
+  const lines = text.replace(/\r/g, "").split("\n"); let out = "", i = 0, para = [];
+  const flush = () => { if (para.length) { out += "<p>" + inline(para.join(" ")) + "</p>"; para = []; } };
+  const cells = (l) => l.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
+  while (i < lines.length) {
+    const l = lines[i], t = l.trim();
+    if (!t) { flush(); i++; continue; }
+    if (t.startsWith("|") && i + 1 < lines.length && /^\|?\s*:?-{2,}/.test(lines[i + 1].trim())) {
+      flush(); const head = cells(t); i += 2; let rows = "";
+      while (i < lines.length && lines[i].trim().startsWith("|")) { rows += "<tr>" + cells(lines[i]).map((c) => "<td>" + inline(c) + "</td>").join("") + "</tr>"; i++; }
+      out += "<table><tr>" + head.map((c) => "<th>" + inline(c) + "</th>").join("") + "</tr>" + rows + "</table>"; continue;
+    }
+    const m = /^(#{1,4})\s+(.*)$/.exec(t);
+    if (m) { flush(); out += `<h4>${inline(m[2])}</h4>`; i++; continue; }
+    if (/^([-*•]|\d+[.)])\s+/.test(t)) {
+      flush(); const ord = /^\d/.test(t); let items = "";
+      while (i < lines.length && /^\s*([-*•]|\d+[.)])\s+/.test(lines[i])) { items += "<li>" + inline(lines[i].replace(/^\s*([-*•]|\d+[.)])\s+/, "")) + "</li>"; i++; }
+      out += (ord ? "<ol>" : "<ul>") + items + (ord ? "</ol>" : "</ul>"); continue;
+    }
+    para.push(t); i++;
+  }
+  flush(); return out;
+}
+async function api(path, opts = {}) {
+  const headers = Object.assign({}, opts.headers || {});
+  const key = $("apikey").value; if (key) headers["X-API-Key"] = key;
+  const res = await fetch(path, Object.assign({}, opts, { headers }));
+  if (!res.ok) {
+    let detail = res.statusText;
+    try { const j = await res.json(); detail = typeof j.detail === "string" ? j.detail : JSON.stringify(j.detail); } catch (e) {}
+    throw new Error(`${res.status}: ${detail}`);
+  }
+  return res;
+}
+const json = (body) => ({ method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+function addMsg(role, html, tag) {
+  const d = document.createElement("div"); d.className = "msg " + role;
+  d.innerHTML = (tag ? `<span class="tag">${esc(tag)}</span>` : "") + html;
+  $("log").appendChild(d); $("log").scrollTop = $("log").scrollHeight; return d;
+}
+const addErr = (e) => addMsg("bot err", esc(e.message || String(e)), "Error");
+
+// ---------- status & documents
+async function refreshStatus() {
+  try {
+    const h = await (await fetch("/health")).json();
+    const s = $("status"); s.textContent = h.ready ? `ready · ${h.documents} document(s)` : "not ready";
+    s.className = "pill " + (h.ready ? "ok" : "bad"); s.title = h.detail || (h.ocr_available ? "" : "Tesseract OCR not found");
+    $("keybox").hidden = !h.auth_required;
+  } catch (e) { $("status").textContent = "offline"; $("status").className = "pill bad"; }
+}
+async function refreshDocs() {
+  try {
+    const { documents } = await (await api("/documents")).json(); const names = Object.keys(documents);
+    $("docs").innerHTML = names.map((n) => `<div class="doc"><span class="name">📄 ${esc(n)} <span class="small">${documents[n].chunks} chunks</span></span><button data-del="${esc(n)}" title="Remove">✕</button></div>`).join("") || '<div class="small">No documents yet.</div>';
+    $("clear").hidden = !names.length;
+  } catch (e) { $("docs").innerHTML = `<div class="small bad">${esc(e.message)}</div>`; }
+  refreshStatus();
+}
+$("docs").addEventListener("click", async (ev) => {
+  const n = ev.target.dataset && ev.target.dataset.del; if (!n) return;
+  try { await api("/documents/" + encodeURIComponent(n), { method: "DELETE" }); } catch (e) { addErr(e); }
+  refreshDocs();
+});
+$("clear").onclick = async () => { if (!confirm("Remove all documents and conversations?")) return;
+  try { await api("/documents", { method: "DELETE" }); sessionId = null; try { sessionStorage.removeItem("sid"); } catch (e) {} } catch (e) { addErr(e); } refreshDocs(); };
+
+async function upload(fileList) {
+  if (!fileList.length) return; const fd = new FormData(); for (const f of fileList) fd.append("files", f);
+  $("upload-msg").textContent = "Processing (reading, OCR, chunking, embedding)…";
+  try {
+    const rs = await (await api("/documents", { method: "POST", body: fd })).json();
+    $("upload-msg").innerHTML = rs.map((r) => r.ok ? `<div class="ok">✓ ${esc(r.source)}: ${r.text_chunks} text + ${r.table_chunks} table chunks${r.warnings.map((w) => `<br>⚠ ${esc(w)}`).join("")}</div>`
+                                                    : `<div class="bad">✗ ${esc(r.source)}: ${esc(r.error || "failed")}${r.warnings.map((w) => `<br>⚠ ${esc(w)}`).join("")}</div>`).join("");
+  } catch (e) { $("upload-msg").innerHTML = `<span class="bad">${esc(e.message)}</span>`; }
+  refreshDocs();
+}
+$("drop").onclick = () => $("files").click();
+$("files").onchange = (e) => { upload(e.target.files); e.target.value = ""; };
+["dragover", "dragenter"].forEach((t) => $("drop").addEventListener(t, (e) => { e.preventDefault(); $("drop").classList.add("over"); }));
+["dragleave", "drop"].forEach((t) => $("drop").addEventListener(t, (e) => { e.preventDefault(); $("drop").classList.remove("over"); }));
+$("drop").addEventListener("drop", (e) => upload(e.dataTransfer.files));
+
+// ---------- asking
+function showAnswer(r, via) {
+  sessionId = r.session_id; try { sessionStorage.setItem("sid", sessionId); } catch (e) {}
+  addMsg("bot", md(r.answer), "Assistant" + (via ? " · " + via : ""));
+  if ($("speak").checked && "speechSynthesis" in window) {
+    const plain = r.answer.replace(/\*\*Sources\*\*[\s\S]*$/, "").replace(/\[\d+\]/g, "").replace(/[*#|`]/g, " ");
+    speechSynthesis.cancel(); speechSynthesis.speak(new SpeechSynthesisUtterance(plain.slice(0, 1500)));
+  }
+}
+async function ask() {
+  const q = $("q").value.trim(); if (!q || busy) return; busy = true; $("send").disabled = true;
+  $("q").value = ""; addMsg("user", esc(q)); const wait = addMsg("bot", "Thinking…", "Assistant");
+  try { const r = await (await api("/query", json({ question: q, session_id: sessionId }))).json(); wait.remove(); showAnswer(r); }
+  catch (e) { wait.remove(); addErr(e); } busy = false; $("send").disabled = false;
+}
+$("send").onclick = ask;
+$("q").addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); ask(); } });
+
+// ---------- voice
+$("mic").onclick = async () => {
+  if (recorder && recorder.state === "recording") { recorder.stop(); return; }
+  if (!navigator.mediaDevices || !window.MediaRecorder) { addErr(new Error("This browser cannot record audio. Use a recent Chrome, Edge, Firefox or Safari over http://localhost or https.")); return; }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const mime = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg"].find((m) => MediaRecorder.isTypeSupported(m)) || "";
+    recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined); chunks = [];
+    recorder.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+    recorder.onstop = async () => {
+      stream.getTracks().forEach((t) => t.stop()); $("mic").classList.remove("rec"); $("mic").textContent = "🎤 Speak";
+      const type = recorder.mimeType || "audio/webm"; const ext = type.includes("mp4") ? "m4a" : type.includes("ogg") ? "ogg" : "webm";
+      const blob = new Blob(chunks, { type }); if (blob.size < 1000) { addErr(new Error("Nothing was recorded.")); return; }
+      const fd = new FormData(); fd.append("audio", blob, "recording." + ext); if (sessionId) fd.append("session_id", sessionId);
+      busy = true; $("send").disabled = true; const wait = addMsg("user", "🎤 Transcribing…");
+      try { const r = await (await api("/voice/query", { method: "POST", body: fd })).json(); wait.innerHTML = "🎤 " + esc(r.transcript); showAnswer(r, "voice"); }
+      catch (e) { wait.remove(); addErr(e); } busy = false; $("send").disabled = false;
+    };
+    recorder.start(); $("mic").classList.add("rec"); $("mic").textContent = "⏹ Stop";
+  } catch (e) { addErr(new Error("Microphone unavailable: " + e.message)); }
+};
+
+// ---------- images / OCR
+function imageForm() { const f = $("img").files[0]; if (!f) { addErr(new Error("Choose an image first.")); return null; } const fd = new FormData(); fd.append("image", f); return fd; }
+async function ocrCall(path, extra) {
+  const fd = imageForm(); if (!fd) return null; for (const k in extra || {}) if (extra[k]) fd.append(k, extra[k]);
+  try { return await (await api(path, { method: "POST", body: fd })).json(); } catch (e) { addErr(e); return null; }
+}
+function showOcr(text, conf, warnings) {
+  const o = $("ocr-out"); o.hidden = false;
+  o.textContent = (text || "(no text found)") + (conf != null ? `\n\n— confidence ${conf}/100` : "") + (warnings && warnings.length ? "\n⚠ " + warnings.join("\n⚠ ") : "");
+}
+$("ocr-only").onclick = async () => { const r = await ocrCall("/images/ocr"); if (r) showOcr(r.text, r.confidence, r.warnings); };
+$("ocr-ingest").onclick = async () => { const r = await ocrCall("/images/ingest"); if (r) { showOcr(r.ocr_text, r.ocr_confidence, r.warnings.concat(r.error ? [r.error] : [])); refreshDocs(); } };
+$("ocr-ask").onclick = async () => {
+  const r = await ocrCall("/images/query", { instruction: $("img-instruction").value, session_id: sessionId }); if (!r) return;
+  showOcr(r.ocr.text, r.ocr.confidence, r.ocr.warnings); addMsg("user", "🖼 " + esc(r.question.slice(0, 300))); showAnswer(r, "image");
+};
+
+// ---------- reports
+$("rep-go").onclick = async () => {
+  if (!sessionId) { $("rep-msg").textContent = "Ask a question first."; return; }
+  $("rep-go").disabled = true; $("rep-msg").textContent = "The report agent is designing the PDF…"; $("rep-out").innerHTML = "";
+  try {
+    const r = await (await api("/reports", json({ session_id: sessionId, instructions: $("rep-inst").value, title: $("rep-title").value || null }))).json();
+    $("rep-msg").textContent = "";
+    // fetch with the API key (if any) and open the blob, so the download works when auth is enabled
+    const blob = await (await api(r.download_url)).blob(); const url = URL.createObjectURL(blob);
+    $("rep-out").innerHTML = `<p><a href="${url}" target="_blank" rel="noopener" download="report.pdf">⬇ Download “${esc(r.title)}”</a> <span class="small">(${r.pages} page(s), ${r.exchanges} exchange(s))</span></p>` +
+      (r.used_default_layout ? '<p class="small">The agent returned no layout, so the default design was used.</p>' : "") +
+      `<details><summary>What the agent did (${r.design_log.length} steps)</summary><div class="small">${r.design_log.map(esc).join("<br>")}</div></details>`;
+  } catch (e) { $("rep-msg").innerHTML = `<span class="bad">${esc(e.message)}</span>`; }
+  $("rep-go").disabled = false;
+};
+
+refreshDocs();
+</script>
+</body>
+</html>
